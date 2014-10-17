@@ -1,20 +1,5 @@
 #!/bin/sh
 
-# Check - is sg module loaded. If not load it. If error - exit.
-#lsmod | grep -q sg
-#if [ "$?" -ne "0" ]; then
-#    echo "sg module not loaded - loading it..."
-#    sudo modprobe sg
-#    if [ "$?" -ne "0" ]; then
-#	echo "Error loading module sg!"
-#	echo "Try to recompile you kernel with \
-#option 'CONFIG_CHR_DEV_SG=m'."
-#	echo "You may find it in 'Device Drivers' -> \
-#'SCSI' drivers"
-#	exit 1
-#    fi
-#fi
-
 #echo "*****************************************************************"
 #echo "*  Starting GDB server...                                       *"
 #echo "*  For connect to it - run GDB in another console and:          *"

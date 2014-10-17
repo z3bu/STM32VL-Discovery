@@ -1,77 +1,101 @@
-BIN=stm32vldiscovery
+TARGET:=Demo
+TOOLCHAIN_PATH:=/usr/bin
+TOOLCHAIN_PREFIX:=arm-none-eabi
 
-TOOLS_PATH=/usr
-TOOLS_PREFIX=arm-none-eabi
-TOOLS_VERSION=4.8.4
+CC=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-gcc
+OBJCOPY=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-objcopy
+AS=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-as
+AR=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-ar
+GDB=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-gdb
+SIZE=$(TOOLCHAIN_PATH)/$(TOOLCHAIN_PREFIX)-size
 
-OPTLVL:=0 # Optimization level, can be [0, 1, 2, 3, s].
+OPTLVL:=1 # Optimization level, can be [0, 1, 2, 3, s].
 
-CFLAGS=-c -mcpu=cortex-m3 -mthumb -Wall -O$(OPTLVL) -mapcs-frame -D__thumb2__=1 
-CFLAGS+=-msoft-float -gdwarf-2 -mno-sched-prolog -fno-hosted -mtune=cortex-m3 
-CFLAGS+=-march=armv7-m -mfix-cortex-m3-ldrd -ffunction-sections -fdata-sections 
-CFLAGS+=-I./cmsis -I./stm32_lib -I.
-ASFLAGS=-mcpu=cortex-m3 -I./cmsis -I./stm32_lib -gdwarf-2 -gdwarf-2
-LDFLAGS=--specs=nosys.specs
-LDFLAGS+=-static -mcpu=cortex-m3 -mthumb -mthumb-interwork -Wl,--start-group 
-LDFLAGS+=-L$(TOOLS_PATH)/lib/gcc/arm-none-eabi/$(TOOLS_VERSION)/thumb 
-LDFLAGS+=-L$(TOOLS_PATH)/arm-none-eabi/lib/thumb -lc -lg -lstdc++ -lsupc++ -lgcc -lm 
-#LDFLAGS+=--section-start=.text=0x8000000
-LDFLAGS+=-Wl,--end-group -Xlinker -Map -Xlinker $(BIN).map -Xlinker 
-LDFLAGS+=-T ./stm32_lib/device_support/gcc/stm32f100rb_flash.ld -o $(BIN).elf
+PROJECT_NAME:=$(notdir $(lastword $(CURDIR)))
+STMLIB:=$(CURDIR)/stm32lib
+CORE:=$(CURDIR)/cmsis
+DEVICE:=$(CURDIR)/device
+STARTUP:=$(CURDIR)/device/startup
+LINKER_SCRIPT:=$(CURDIR)/device/linker/STM32F100RB_FLASH.ld
 
-CC=$(TOOLS_PATH)/bin/$(TOOLS_PREFIX)-gcc-$(TOOLS_VERSION)
-AS=$(TOOLS_PATH)/bin/$(TOOLS_PREFIX)-as
-SIZE=$(TOOLS_PATH)/bin/$(TOOLS_PREFIX)-size
-OBJCOPY=$(TOOLS_PATH)/bin/$(TOOLS_PREFIX)-objcopy
+INCLUDE=-I"$(CORE)"
+INCLUDE+=-I"$(DEVICE)"
+INCLUDE+=-I"$(CURDIR)/inc"
+INCLUDE+=-I"$(STMLIB)/inc"
+
 
 # vpath is used so object files are written to the current directory instead
 # of the same directory as their source files
-#vpath %.c $(CURDIR)/src $(STD_PERIPH)/src $(DEVICE) $(CORE) $(DISCOVERY) 
-#vpath %.s $(STARTUP)
+vpath %.c $(CURDIR)/src $(STMLIB)/src $(CORE) $(DEVICE)
+vpath %.s $(STARTUP)
 
-#INC_PATH=./inc
-# -I"$(INC_PATH)"
-SRC_PATH=stm32_lib
-#./src
-
-CMSISSRC=./cmsis/core_cm3.c
-STM32_LIBSRC=$(SRC_PATH)/system_stm32f10x.c
-STM32_LIBSRC+=$(SRC_PATH)/stm32f10x_it.c
-STM32_LIBSRC+=$(SRC_PATH)/stm32f10x_rcc.c
-STM32_LIBSRC+=$(SRC_PATH)/stm32f10x_gpio.c
-
+# Project Source Files
 SRC=main.c
+#SRC+=stm32f10x_it.c
 
-OBJ=core_cm3.o system_stm32f10x.o stm32f10x_it.o startup_stm32f10x_md_vl.o
-OBJ+=stm32f10x_rcc.o stm32f10x_gpio.o
-OBJ+=main.o
+ASRC=startup_stm32f10x_md_vl.s
 
-all: ccmsis cstm32_lib cc ldall
-	$(SIZE) -B $(BIN).elf
+#CMSIS core and device
+CMSIS=core_cm3.c
+CMSIS+=system_stm32f10x.c
 
-ccmsis: $(CMSISSRC)
-	$(CC) $(CFLAGS) $(CMSISSRC)
+#Standard Peripheral Source Files
+STM32LIB=stm32f10x_gpio.c
+STM32LIB+=stm32f10x_rcc.c
+#STM32LIB+=stm32f10x_pwr.c
+#STM32LIB+=misc.c
+#STM32LIB+=stm32f10x_exti.c
 
-cstm32_lib: $(STM32_LIBSRC)
-	$(CC) $(CFLAGS) $(STM32_LIBSRC)
-	$(AS) $(ASFLAGS) ./stm32_lib/device_support/gcc/startup_stm32f10x_md_vl.S -o startup_stm32f10x_md_vl.o
+ASFLAGS=-mcpu=cortex-m3 -gdwarf-2
 
-cc: $(SRC)
-	$(CC) $(CFLAGS) $(SRC)
+#see stm32lib/inc/stm32f10x.h
+CDEFS=-DSTM32F10X_MD_VL
+CDEFS+=-DUSE_STDPERIPH_DRIVER
 
-ldall:
-	$(CC) $(OBJ) $(LDFLAGS)
+MCUFLAGS= -c -mcpu=cortex-m3 -mthumb -msoft-float -gdwarf-2 -mno-sched-prolog -fno-hosted -mtune=cortex-m3\
+		-march=armv7-m -mfix-cortex-m3-ldrd
+COMMONFLAGS=-O$(OPTLVL) -g -Wall -Werror 
+CFLAGS=$(COMMONFLAGS) $(MCUFLAGS) $(CDEFS)
+
+LDLIBS=
+LDFLAGS=$(COMMONFLAGS) -fno-exceptions -ffunction-sections -fdata-sections \
+        -nostartfiles -Wl,--gc-sections,-T$(LINKER_SCRIPT)
+
+OBJ = $(CMSIS:%.c=%.o) $(STM32LIB:%.c=%.o) $(SRC:%.c=%.o) $(ASRC:%.s=%.o)
+
+all: ccore cstm32lib casrc csrc ldall
+	$(OBJCOPY) -O ihex   $(TARGET).elf $(TARGET).hex
+	$(OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
+	$(SIZE) -B $(TARGET).hex
+
+ccore: $(CMSIS)
+	$(CC) $(CFLAGS) $(INCLUDE) $^
+
+cstm32lib: $(STM32LIB)
+	$(CC) $(CFLAGS) $(INCLUDE) $^
+
+csrc: $(SRC)
+	$(CC) $(CFLAGS) $(INCLUDE) $^
+	
+casrc: $(ASRC)
+	$(AS) $(ASFLAGS) $(INCLUDE) $^ -o $(ASRC:%.s=%.o)
+
+ldall: $(OBJ)
+	$(CC) -o $(TARGET).elf $(LDFLAGS) $(LDLIBS) $^ 
+
+#################
 
 .PHONY: clean load
 
 clean:
-	rm -f 	$(OBJ) \
-		$(BIN).map \
-		$(BIN).bin \
-		$(BIN).elf
+	rm -f $(OBJ)
+	rm -f $(TARGET).elf
+	rm -f $(TARGET).hex
+	rm -f $(TARGET).bin
 
-load: $(BIN).elf
-	$(OBJCOPY) -O binary $(BIN).elf $(BIN).bin
-	./flashing_stm32vldiscovery.sh $(BIN).bin
+load: $(TARGET).bin
+	./flashing_stm32vldiscovery.sh $^
 
-#debug:
+
+
+
